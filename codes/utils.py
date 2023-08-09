@@ -43,19 +43,21 @@ class EarlyStopping(object):
         self.early_stop = False
 
     def _check_higher(self, score, prev_best_score):
-        # return (score > prev_best_score)
-        return score / prev_best_score > 1 + self.tolerance
+        if score / prev_best_score > 1:
+            self.best_score = score
+        return score / prev_best_score + self.tolerance > 1 
 
     def _check_lower(self, score, prev_best_score):
         # return (score < prev_best_score)
-        return prev_best_score / score > 1 + self.tolerance
+        if prev_best_score / score > 1:
+            self.best_score = score
+        return prev_best_score / score + self.tolerance > 1
 
     def step(self, score, model):
         if self.best_score is None:
             self.best_score = score
             self.save_checkpoint(model)
         elif self._check(score, self.best_score):
-            self.best_score = score
             self.save_checkpoint(model)
             self.counter = 0
         else:
@@ -68,7 +70,7 @@ class EarlyStopping(object):
 
     def save_checkpoint(self, model):
         '''Saves model when the metric on the validation set gets improved.'''
-        torch.save({'model_state_dict': model.state_dict()}, self.filename)  # 保存网络中的参数, 速度快，占空间少, 以字典格式存储
+        torch.save({'model_state_dict': model.state_dict()}, self.filename)  
 
     def load_checkpoint(self, model):
         '''Load model saved with early stopping.'''

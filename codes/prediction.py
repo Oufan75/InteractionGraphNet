@@ -18,6 +18,7 @@ from sklearn.metrics import mean_squared_error
 import argparse
 
 torch.backends.cudnn.benchmark = True
+#dgl.use_libxsmm(false)
 warnings.filterwarnings('ignore')
 
 
@@ -59,12 +60,12 @@ edge_feat_size_3d = 21
 graph_feat_size = 128
 num_layers = 2
 outdim_g3 = 128
-d_FC_layer, n_FC_layer = 128, 2
-dropout = 0.15
+d_FC_layer, n_FC_layer = 128, 2 #200
+dropout = 0.2
 n_tasks = 1
 mark = '3d'
 path_marker = '/'
-
+#pkfile = "../new_split/new_split_test.csv"
 
 
 if __name__ == '__main__':
@@ -73,13 +74,13 @@ if __name__ == '__main__':
                            help="absolute path for storing graph list objects")
     argparser.add_argument('--graph_dic_path', type=str, default='./examples/graph_dic_path',
                            help="absolute path for storing graph dictionary objects (temporary files)")
-    argparser.add_argument('--model_path', type=str, default='./model/pdb2016_10A_20201230_3d_2_ciap1.pth',
+    argparser.add_argument('--model_path', type=str, default='./model_save/pdb2016_10A_20201230_3d_2_ciap1.pth',
                            help="absolute path for storing pretrained model")
     argparser.add_argument('--cpu', type=bool, default=True,
                            help="using cpu for the prediction (default:True)")
     argparser.add_argument('--gpuid', type=int, default=0,
                            help="the gpu id for the prediction")
-    argparser.add_argument('--num_process', type=int, default=12,
+    argparser.add_argument('--num_process', type=int, default=30,
                            help="the number of process for generating graph objects")
     argparser.add_argument('--input_path', type=str, default='./examples/ign_input',
                            help="the absoute path for storing ign input files")
@@ -93,24 +94,25 @@ if __name__ == '__main__':
                                                                                      args.input_path
     if not os.path.exists('./stats'):
         os.makedirs('./stats')
-
-    keys = os.listdir(input_path)
-    labels = []
+    
+    df = pd.read_csv("../new_split/newsplit_CL1CL2.csv")
+    keys = df["PDB"] #os.listdir(input_path)
+    labels = df["label"] #- np.log10(df["IC50"].values) - np.log10(1e-6)
     data_dirs = []
+        
     for key in keys:
+        #labels.append(df[df['PDB'] == key]['value'].values[0])
         data_dirs.append(input_path + path_marker + key)
-        labels.append(0)
-    limit = None
-    dis_threshold = 12
+    dis_threshold = 10
 
     # generating the graph objective using multi process
-    test_dataset = GraphDatasetV2MulPro(keys=keys[:limit], labels=labels[:limit], data_dirs=data_dirs[:limit],
+    test_dataset = GraphDatasetV2MulPro(keys=keys, labels=labels, data_dirs=data_dirs,
                                         graph_ls_path=graph_ls_path,
                                         graph_dic_path=graph_dic_path,
                                         num_process=num_process, dis_threshold=dis_threshold, path_marker=path_marker)
     test_dataloader = DataLoaderX(test_dataset, batch_size, shuffle=False, num_workers=num_workers,
                                   collate_fn=collate_fn_v2_MulPro)
-
+                                  
     DTIModel = DTIPredictorV4_V2(node_feat_size=node_feat_size, edge_feat_size=edge_feat_size_3d, num_layers=num_layers,
                                  graph_feat_size=graph_feat_size, outdim_g3=outdim_g3,
                                  d_FC_layer=d_FC_layer, n_FC_layer=n_FC_layer, dropout=dropout, n_tasks=n_tasks)
@@ -118,13 +120,19 @@ if __name__ == '__main__':
         device = torch.device("cpu")
     else:
         device = torch.device("cuda:%s" % gpuid)
-    DTIModel.load_state_dict(torch.load(model_path, map_location='cpu')['model_state_dict'])
+    DTIModel.load_state_dict(torch.load(model_path, map_location="cpu")['model_state_dict'])
     DTIModel.to(device)
 
     test_true, test_pred, key = run_a_eval_epoch(DTIModel, test_dataloader, device)
-    test_true = np.concatenate(np.array(test_true), 0).flatten()
-    test_pred = np.concatenate(np.array(test_pred), 0).flatten()
-    key = np.concatenate(np.array(key), 0).flatten()
+    
+    try:
+        test_true = np.concatenate(np.array(test_true), 0).flatten()
+        test_pred = np.concatenate(np.array(test_pred), 0).flatten()
+        key = np.concatenate(np.array(key), 0).flatten()
+    except:
+        test_true = np.array(test_true).flatten()
+        test_pred = np.array(test_pred).flatten()
+        key = np.array(key).flatten()
 
-    res = pd.DataFrame({'key': key, 'true': test_true, 'pred': test_pred})
-    res.to_csv('./stats/prediction_results.csv', index=False)
+    res = pd.DataFrame({'key': key, 'pred': test_pred, 'true': test_true}) #
+    res.to_csv('./stats/original_10A_test.csv', index=False)

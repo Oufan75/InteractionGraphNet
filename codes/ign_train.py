@@ -19,8 +19,8 @@ warnings.filterwarnings('ignore')
 import argparse
 path_marker = '/'
 limit = None
-num_process = 48
-
+num_process = 8
+dis_threshold = 12
 
 class DataLoaderX(DataLoader):
 
@@ -61,24 +61,24 @@ def run_a_eval_epoch(model, validation_dataloader, device):
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--gpuid', type=str, default='0', help="gpu id for training model")
-    argparser.add_argument('--lr', type=float, default=10 ** -3.0, help="Learning rate")
+    argparser.add_argument('--lr', type=float, default=1e-3, help="Learning rate")
     argparser.add_argument('--epochs', type=int, default=5000, help="Number of epochs in total")
     argparser.add_argument('--batch_size', type=int, default=200, help="Batch size")
-    argparser.add_argument('--tolerance', type=float, default=0.0, help="early stopping tolerance")
-    argparser.add_argument('--patience', type=int, default=70, help="early stopping patience")
+    argparser.add_argument('--tolerance', type=float, default=0.02, help="early stopping tolerance")
+    argparser.add_argument('--patience', type=int, default=50, help="early stopping patience")
     argparser.add_argument('--l2', type=float, default=10 ** -6, help="L2 regularization")
     argparser.add_argument('--repetitions', type=int, default=3, help="the number of independent runs")
     argparser.add_argument('--node_feat_size', type=int, default=40)
     argparser.add_argument('--edge_feat_size_2d', type=int, default=12)
     argparser.add_argument('--edge_feat_size_3d', type=int, default=21)
-    argparser.add_argument('--graph_feat_size', type=int, default=256)
+    argparser.add_argument('--graph_feat_size', type=int, default=128)
     argparser.add_argument('--num_layers', type=int, default=3, help='the number of intra-molecular layers')
-    argparser.add_argument('--outdim_g3', type=int, default=200, help='the output dim of inter-molecular layers')
-    argparser.add_argument('--d_FC_layer', type=int, default=200, help='the hidden layer size of task networks')
+    argparser.add_argument('--outdim_g3', type=int, default=128, help='the output dim of inter-molecular layers')
+    argparser.add_argument('--d_FC_layer', type=int, default=128, help='the hidden layer size of task networks')
     argparser.add_argument('--n_FC_layer', type=int, default=2, help='the number of hidden layers of task networks')
     argparser.add_argument('--dropout', type=float, default=0.1, help='dropout ratio')
     argparser.add_argument('--n_tasks', type=int, default=1)
-    argparser.add_argument('--num_workers', type=int, default=0,
+    argparser.add_argument('--num_workers', type=int, default=4,
                            help='number of workers for loading data in Dataloader')
     argparser.add_argument('--model_save_dir', type=str, default='./model_save', help='path for saving model')
     argparser.add_argument('--mark', type=str, default='3d')
@@ -91,7 +91,7 @@ if __name__ == '__main__':
     outdim_g3, d_FC_layer, n_FC_layer, dropout, n_tasks, mark = args.outdim_g3, args.d_FC_layer, args.n_FC_layer, args.dropout, args.n_tasks, args.mark
 
     HOME_PATH = os.getcwd()
-    all_data = pd.read_csv('./examples/PDB2016ALL.csv')
+    all_data = pd.read_csv('../new_split/newsplit_CL1CL2.csv')
 
     if not os.path.exists(model_save_dir):
         os.makedirs(model_save_dir)
@@ -99,16 +99,17 @@ if __name__ == '__main__':
         os.makedirs('./stats')
 
     # data
-    train_dir = './examples/binding_affinity/training/complex'
-    valid_dir = './examples/binding_affinity/validation/complex'
-    test_dir = './examples/binding_affinity/test/complex'
+    train_dir = '../new_split/train_complex'
+    valid_dir = '../new_split/val_complex'
+    test_dir = '../new_split/test_complex'
 
     # training data
-    train_keys = os.listdir(train_dir)
     train_labels = []
     train_data_dirs = []
+    training_data = pd.read_csv("../new_split/UCBSplit_training_data.csv")
+    train_keys = training_data["PDB"] # [~training_data.remove_for_casf & ~training_data.remove_for_mpro]
+    train_labels = training_data["value"]
     for key in train_keys:
-        train_labels.append(all_data[all_data['PDB'] == key]['label'].values[0])
         train_data_dirs.append(train_dir + path_marker + key)
 
 
@@ -127,25 +128,30 @@ if __name__ == '__main__':
     for key in test_keys:
         test_labels.append(all_data[all_data['PDB'] == key]['label'].values[0])
         test_data_dirs.append(test_dir + path_marker + key)
-
-
+    print(len(train_keys), len(valid_keys), len(test_keys))
+    
     # generating the graph objective using multi process
     train_dataset = GraphDatasetV2MulPro(keys=train_keys[:limit], labels=train_labels[:limit], data_dirs=train_data_dirs[:limit],
-                                        graph_ls_path='./examples/binding_affinity/training/graph_ls_path',
-                                        graph_dic_path='./examples/binding_affinity/training/graph_dic_path',
-                                        num_process=num_process, path_marker=path_marker)
-
+                                        graph_ls_path='../new_split/train_ign_ls',
+                                        graph_dic_path='../new_split/test_ign_dic',
+                                        num_process=num_process, path_marker=path_marker,
+                                        dis_threshold=dis_threshold)
 
     valid_dataset = GraphDatasetV2MulPro(keys=valid_keys[:limit], labels=valid_labels[:limit], data_dirs=valid_data_dirs[:limit],
-                                         graph_ls_path='./examples/binding_affinity/validation/graph_ls_path',
-                                         graph_dic_path='./examples/binding_affinity/validation/graph_dic_path',
-                                         num_process=num_process, path_marker=path_marker)
+                                         graph_ls_path='../new_split/val_ign_ls',
+                                         graph_dic_path='../new_split/test_ign_dic',
+                                         num_process=num_process, path_marker=path_marker,
+                                         dis_threshold=dis_threshold)
     test_dataset = GraphDatasetV2MulPro(keys=test_keys[:limit], labels=test_labels[:limit],
                                          data_dirs=test_data_dirs[:limit],
-                                         graph_ls_path='./examples/binding_affinity/test/graph_ls_path',
-                                         graph_dic_path='./examples/binding_affinity/test/graph_dic_path',
-                                         num_process=num_process, path_marker=path_marker)
-
+                                         graph_ls_path='../new_split/test_ign_ls',
+                                         graph_dic_path='../new_split/test_ign_dic',
+                                         num_process=num_process, path_marker=path_marker,
+                                         dis_threshold=dis_threshold)
+    use_train_keys = train_dataset.keys
+    use_valid_keys = valid_dataset.keys
+    use_test_keys = test_dataset.keys
+    
     stat_res = []
     for repetition_th in range(repetitions):
         set_random_seed(repetition_th)
@@ -162,8 +168,6 @@ if __name__ == '__main__':
                                      graph_feat_size=graph_feat_size, outdim_g3=outdim_g3,
                                      d_FC_layer=d_FC_layer, n_FC_layer=n_FC_layer, dropout=dropout, n_tasks=n_tasks)
         print('number of parameters : ', sum(p.numel() for p in DTIModel.parameters() if p.requires_grad))
-        if repetition_th == 0:
-            print(DTIModel)
         device = torch.device("cuda:%s" % gpuid if torch.cuda.is_available() else "cpu")
         DTIModel.to(device)
         optimizer = torch.optim.Adam(DTIModel.parameters(), lr=lr, weight_decay=l2)
@@ -220,10 +224,10 @@ if __name__ == '__main__':
 
         test_true = np.concatenate(np.array(test_true), 0).flatten()
         test_pred = np.concatenate(np.array(test_pred), 0).flatten()
-
-        pd_tr = pd.DataFrame({'key': train_keys, 'train_true': train_true, 'train_pred': train_pred})
-        pd_va = pd.DataFrame({'key': valid_keys, 'valid_true': valid_true, 'valid_pred': valid_pred})
-        pd_te = pd.DataFrame({'key': test_keys, 'test_true': test_true, 'test_pred': test_pred})
+        
+        pd_tr = pd.DataFrame({'key': use_train_keys[:limit], 'train_true': train_true, 'train_pred': train_pred})
+        pd_va = pd.DataFrame({'key': use_valid_keys[:limit], 'valid_true': valid_true, 'valid_pred': valid_pred})
+        pd_te = pd.DataFrame({'key': use_test_keys[:limit], 'test_true': test_true, 'test_pred': test_pred})
 
         pd_tr.to_csv('./stats/{}_{:02d}_{:02d}_{:02d}_{:d}_tr.csv'.format(dt.date(), dt.hour, dt.minute, dt.second,
                                                                           dt.microsecond), index=False)
@@ -255,13 +259,14 @@ if __name__ == '__main__':
         stat_res.append([repetition_th, 'valid', valid_rmse, valid_r2, valid_mae, valid_rp[0]])
         stat_res.append([repetition_th, 'test', test_rmse, test_r2, test_mae, test_rp[0]])
 
-    stat_res_pd = pd.DataFrame(stat_res, columns=['repetition', 'group', 'rmse', 'r2', 'mae', 'rp'])
-    stat_res_pd.to_csv(
-        './stats/{}_{:02d}_{:02d}_{:02d}_{:d}.csv'.format(dt.date(), dt.hour, dt.minute, dt.second, dt.microsecond),
-        index=False)
-    print(stat_res_pd[stat_res_pd.group == 'train'].mean().values[-4:],
-          stat_res_pd[stat_res_pd.group == 'train'].std().values[-4:])
-    print(stat_res_pd[stat_res_pd.group == 'valid'].mean().values[-4:],
-          stat_res_pd[stat_res_pd.group == 'valid'].std().values[-4:])
-    print(stat_res_pd[stat_res_pd.group == 'test'].mean().values[-4:],
-          stat_res_pd[stat_res_pd.group == 'test'].std().values[-4:])
+    if repetitions > 1:
+        stat_res_pd = pd.DataFrame(stat_res, columns=['repetition', 'group', 'rmse', 'r2', 'mae', 'rp'])
+        stat_res_pd.to_csv(
+            './stats/{}_{:02d}_{:02d}_{:02d}_{:d}.csv'.format(dt.date(), dt.hour, dt.minute, dt.second, dt.microsecond),
+            index=False)
+        print(stat_res_pd[stat_res_pd.group == 'train'].mean().values[-4:],
+              stat_res_pd[stat_res_pd.group == 'train'].std().values[-4:])
+        print(stat_res_pd[stat_res_pd.group == 'valid'].mean().values[-4:],
+              stat_res_pd[stat_res_pd.group == 'valid'].std().values[-4:])
+        print(stat_res_pd[stat_res_pd.group == 'test'].mean().values[-4:],
+              stat_res_pd[stat_res_pd.group == 'test'].std().values[-4:])

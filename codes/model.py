@@ -127,7 +127,7 @@ class AttentiveGRU1(nn.Module):
     def forward(self, g, edge_logits, edge_feats, node_feats):
         g = g.local_var()
         g.edata['e'] = edge_softmax(g, edge_logits) * self.edge_transform(edge_feats)
-        g.update_all(fn.copy_edge('e', 'm'), fn.sum('m', 'c'))
+        g.update_all(fn.copy_e('e', 'm'), fn.sum('m', 'c'))
         context = F.elu(g.ndata['c'])
         return F.relu(self.gru(context, node_feats))
 
@@ -147,7 +147,7 @@ class AttentiveGRU2(nn.Module):
         g.edata['a'] = edge_softmax(g, edge_logits)
         g.ndata['hv'] = self.project_node(node_feats)
 
-        g.update_all(fn.src_mul_edge('hv', 'a', 'm'), fn.sum('m', 'c'))
+        g.update_all(fn.u_mul_e('hv', 'a', 'm'), fn.sum('m', 'c'))
         context = F.elu(g.ndata['c'])
         return F.relu(self.gru(context, node_feats))
 
@@ -183,7 +183,6 @@ class GetContext(nn.Module):
         g.ndata['hv'] = node_feats
         g.ndata['hv_new'] = self.project_node(node_feats)
         g.edata['he'] = edge_feats
-
         g.apply_edges(self.apply_edges1)
         g.edata['he1'] = self.project_edge1(g.edata['he1'])
         g.apply_edges(self.apply_edges2)
@@ -408,6 +407,7 @@ class DTIPredictorV4_V2(nn.Module):
     def forward(self, bg, bg3):
         atom_feats = bg.ndata.pop('h')
         bond_feats = bg.edata.pop('e')
+
         atom_feats = self.cov_graph(bg, atom_feats, bond_feats)
         bond_feats3 = bg3.edata['e']
         bond_feats3 = self.noncov_graph(bg3, atom_feats, bond_feats3)
