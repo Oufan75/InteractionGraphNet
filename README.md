@@ -6,14 +6,14 @@ InteractionGraphNet: a Novel and Efficient Deep Graph Representation Learning Fr
 conda create -f env.yml
 ```
 
-# IGN Training (A toy example)
+# IGN Training (retrained with LP-PDBBind)
+LP-PDBBind https://github.com/THGLab/LP-PDBBind.git
 ```
-python ./codes/ign_train.py --gpuid 0 --epochs 5 --repetitions 3 --lr 0.0001 --l2 0.000001 --dropout 0.1 
+python ./codes/ign_train.py --gpuid 0 --epochs 500 --batch_size 128 --graph_feat_size 128 --num_layers 2 --outdim_g3 128 --d_FC_layer 128 --repetitions 3 --lr 0.001 --l2 0.00001 --dropout 0.2
 ```
 
-# Binding Affinity Prediction 
-We use the well-trained IGN model to predict the binding affinity of complexes generated from docking program
-
+# Ligand Screening (on same target pocket)
+We use the retrained IGN model to predict the binding affinity of complexes generated from docking program
 ```
-python3 ./codes/prediction.py --cpu True --num_process 12 --input_path  ./examples/ign_input
+python ./codes/score.py --protein xxx --ligands xxx --graph_dic_path input_path --output output.csv
 ```
