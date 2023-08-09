@@ -3,7 +3,7 @@ InteractionGraphNet: a Novel and Efficient Deep Graph Representation Learning Fr
 
 # Environment
 ```
-conda create -f env.yml
+conda env create -f env.yml
 ```
 
 # IGN Training (retrained with LP-PDBBind)
