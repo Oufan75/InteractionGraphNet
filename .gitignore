@@ -1,0 +1,11 @@
+slurm*.out
+submit.sh
+examples/
+stats/
+__pycache__/
+#codes/ign_train.py
+codes/prediction.py
+model_save/2023-07*.pth
+model_save/2023-06-23_02_30_29_586500.pth
+model_save/2023-06-23_03_35_19_113653.pth
+model_save/2023-06-23_04_12_55_265090.pth
